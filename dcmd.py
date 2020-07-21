@@ -1,13 +1,28 @@
-import win32api, win32gui, win32con
+import win32api, win32gui, win32con, win32process
 from ctypes import windll, byref, wintypes
 from ctypes.wintypes import SMALL_RECT
 import ctypes
-import winbase
-import struct
+import traceback
 import sys
+sys.excepthook = traceback.format_exc
+import struct
+import psutil
+from pause import pause
 if sys.version_info.major == 3:
 	raw_input = input
-	
+try:
+	from make_colors import make_colors
+except:
+	traceback.format_exc()
+	def make_colors(data):
+		return data
+try:
+	from pydebugger.debug import debug
+except:
+	def debug(**kwargs):
+		for i in kwargs:
+			print(str(i), "=", kwargs.get(i), " ", type(kwargs.get(i)))
+HANDLE = win32gui.GetForegroundWindow()
 	
 class COORD(ctypes.Structure):
 	_fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
@@ -29,8 +44,13 @@ class dcmd(object):
 		super(dcmd, self)
 		self.STDOUT = -11
 		self.hdl = windll.kernel32.GetStdHandle(self.STDOUT)
-		self.foreground_handle = win32gui.GetForegroundWindow()
+		if not HANDLE:
+			self.foreground_handle = win32gui.GetForegroundWindow()
+		else:
+			self.foreground_handle = HANDLE
 		
+	def getHandle(self):
+		return HANDLE
 	def getScreenSize(self):
 		return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
 
@@ -40,7 +60,7 @@ class dcmd(object):
 		rect = wintypes.SMALL_RECT(left, top, right, bottom) # (left, top, right, bottom) 
 		windll.kernel32.SetConsoleWindowInfo(self.hdl, True, byref(rect))
 		
-	def setBuffer(self, rows=None, columns=None):
+	def setBuffer(self, rows=None, columns=None, handle = None):
 		width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = self.getBuffer()
 		if not rows:
 			rows = width
@@ -49,22 +69,49 @@ class dcmd(object):
 			
 		#bufsize = wintypes._COORD(100, 80) # rows, columns
 		bufsize = wintypes._COORD(rows, columns) # rows, columns
+		if not handle:
+			handle = self.hdl		
 		windll.kernel32.SetConsoleScreenBufferSize(self.hdl, bufsize)
 		
-	def getBuffer(self):
+	def getBuffer(self, handle = None):
+		if not handle:
+			handle = self.hdl
 		csbi = ctypes.create_string_buffer(22)
-		res = ctypes.windll.kernel32.GetConsoleScreenBufferInfo(self.hdl, csbi)
+		res = ctypes.windll.kernel32.GetConsoleScreenBufferInfo(handle, csbi)
 		width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = struct.unpack("hhhhHhhhhhh", csbi.raw)
 		return width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy
 		#return winbase.GetConsoleScreenBufferInfo()
 		
-	def setSize(self, width=None, height=None, x = None, y = None, center=False):
+	def setSize(self, width=None, height=None, x = None, y = None, center=False, handle = None):
 		x1 = x
 		y1 = y
+		if not handle:
+			handle = self.foreground_handle
+		#print("handle =", handle)
+		#pause()
+		x0, y0, width0, height0 = win32gui.GetWindowRect(handle)
+		#print("width0 =", width0)
+		if not width:
+			width = width0
+		if not height:
+			height = height0
+		if x == "right" or x == "r":
+			x = win32api.GetSystemMetrics(0) - width
+			#y = y0
+		if x == "left" or x == "l":
+			print("width =", width)
+			x = 0
+			#y = y0
+		if x == "button" or x == "b" or y == "button" or y == "b":
+			y = win32api.GetSystemMetrics(1) - height
+			#x = x0
+		if x == "top" or x == "t" or y == "top" or y == "t":
+			y = 30
+			#x = x0
 		#  print("x =", x)
 		#  print("y =", y)
 		#  print("height =", height)
-		x0, y0, width0, height0 = win32gui.GetWindowRect(self.foreground_handle)
+		
 		if x and str(x).isdigit():
 			x = int(x)
 		if y and str(y).isdigit():
@@ -79,53 +126,33 @@ class dcmd(object):
 				y = 0
 			else:
 				y = y0
-		if not width:
-			width = width0 - x
-		if not height:
-			height = height0 - y
 		
-		if x == "right" or x == "r":
-			x = win32api.GetSystemMetrics(0) - width
-			y = y0
-		if x == "left" or x == "l":
-			x = 0
-			y = y0
-		if x == "button" or x == "b" or y == "button" or y == "b":
-			y = win32api.GetSystemMetrics(1) - height
-			x = x0
-		if x == "top" or x == "t" or y == "top" or y == "t":
-			y = 30
-			x = x0
 		if x == 'c' or y == 'c':
 			center = True
 			x = x0
 		
-		#win32gui.MoveWindow(self.foreground_handle, win32api.GetSystemMetrics(0)/3, win32api.GetSystemMetrics(1)/9, 500, 170, True)
+		#  print("x =",x)
+		#  print("y =",y)
+		#  print("width =", width)
 		#  print("height =", height)
 		if center:
-			#  print("x =",x)
-			#  print("y =",y)
-			#  print("width =", width)
-			#  print("height =", height)
-			win32gui.MoveWindow(self.foreground_handle, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, True)
+			win32gui.MoveWindow(handle, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, True)
 		else:
-			#  print("x =",x)
-			#  print("y =",y)
-			#  print("width =", width)
-			#  print("height =", height)
-			win32gui.MoveWindow(self.foreground_handle, x, y, width, height, True)
+			win32gui.MoveWindow(handle, x, y, width, height, True)
 			
-	def setAlwaysOnTop(self, width, height, x = 0, y = 0, center=False):
+	def setAlwaysOnTop(self, width, height, x = 0, y = 0, center=False, handle=None):
+		if not handle:
+			handle = self.foreground_handle
 		#win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_TOPMOST,win32api.GetSystemMetrics(0)/3,win32api.GetSystemMetrics(1)/3,500,170,0)
 		if center:
-			win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_TOPMOST, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, 0)
+			win32gui.SetWindowPos(handle, win32con.HWND_TOPMOST, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, 0)
 		else:
-			win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_TOPMOST, x, y, width, height, 0)
+			win32gui.SetWindowPos(handle, win32con.HWND_TOPMOST, x, y, width, height, 0)
 			
 	def setNormal(self, width, height):
 		win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_NOTOPMOST, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, 0)
 		
-	def changeFont(self, nfont=12, xfont=11, yfont=18, ffont=54, wfont=400, name="Lucida Console"):
+	def changeFont(self, nfont=12, xfont=11, yfont=18, ffont=54, wfont=400, name="Lucida Console", handle = None):
 		font = CONSOLE_FONT_INFOEX() 
 		font.cbSize = ctypes.sizeof(CONSOLE_FONT_INFOEX)
 		font.nFont = nfont
@@ -136,23 +163,202 @@ class dcmd(object):
 		font.FaceName = name
 		#  print("yfont =", yfont)
 		#  print("name  =", name)
+		if not handle:
+			handle = self.hdl
 		ctypes.windll.kernel32.SetCurrentConsoleFontEx(self.hdl, ctypes.c_long(False), ctypes.pointer(font))
 		
-	def getListWindows(self):
+	def getListProcess(self, filter = None):
+		debug(filter = filter)
+		all_process = psutil.process_iter()
+		process = []
+		for i in all_process:
+			if filter:
+				for f in filter:
+					if str(f).isdigit():
+						if int(f) == i.pid:
+							process.append(i)
+					else:
+						if str(f).lower() == i.name() or str(f).lower() in i.name().lower():
+							process.append(i)
+						else:
+							try:
+								if str(f).lower() in i.cmdline().lower():
+									process.append(i)
+							except:
+								pass
+			else:
+				process.append(i)
+		return process
+		
+	def getListWindows(self, all = False, filter=None, print_list=True, pid = None):
+		all_filter = []
+		all_list_hide = []
+		all_windows = []
+		all_pids = []
+		debug(pid = pid)
+		if filter and not pid:
+			process = self.getListProcess(filter)
+			pid = []
+			if process:
+				for i in process:
+					pid.append(i.pid)
+
 		def enumsHandle(hwnd, lParam):
 			title = win32gui.GetWindowText(hwnd)
+			rect = win32gui.GetWindowRect(hwnd)
+			ctid, cpid = win32process.GetWindowThreadProcessId(hwnd)
+			if not title:
+				try:
+					title = psutil.Process(cpid).name()
+				except:
+					pass
+			if not title:
+				try:
+					title = psutil.Process(cpid).cmdline()
+				except:
+					pass
+				
+			if win32gui.IsWindowVisible(hwnd):
+				all_list_hide.append([title, rect, cpid, ctid, hwnd])
 			excpt = ["Form1", "Default IME", "MSCTFIME UI", "frmTray", "frmBar", "frmLine1", "frmLine2", "frmLine3", "frmLine4", "frmLine5", "Rating", "CD Art Display 1.x Class", "CADnotifier", "CiceroUIWndFrame", "VistaSwitcher", "DDE Server Window", "uninteresting", "DWM Notification Window", "EndSessionWindow", "Program Manager", "GetPosWnd", "igfxtrayWindow"]
-			if title and not title in excpt and not len(title) == 1:
-				print(title)
+			all_windows.append([title, rect, cpid, ctid, hwnd])
+			if print_list:
+				if not all:
+					if title and not title in excpt and not len(title) == 1:
+						print(title + " [" + str(rect) + "] [" + str([ctid,cpid]) + "] [" + str(hwnd) + "] (" + str(win32gui.IsWindowVisible(hwnd)) + ")")
+				else:
+					print(title + " [" + str(rect) + "] [" + str([ctid,cpid]) + "] [" + str(hwnd) + "] (" + str(win32gui.IsWindowVisible(hwnd)) + ")")
 		
 		win32gui.EnumWindows(enumsHandle, None)
+		if filter:
+			for i in filter:
+				for x in all_windows:
+					if i in x[0] and not 'administrator' in x[0].lower():
+						all_filter.append(x)
+						if win32gui.IsWindowVisible(x[2]) == 0:
+							all_list_hide.append(x)
+		
+		if pid:
+			for x in all_windows:
+				#print(x)
+				for p in pid:
+					if int(x[2]) == int(str(p).strip()):
+						all_pids.append(x)
+		return all_filter, all_list_hide, all_pids
+	
+	def listHide(self):
+		hdls, h_hide, h_pids = self.getListWindows(print_list = False)
+		if h_hide:
+			n = 1
+			for i in h_hide:
+				if len(str(n)) == 1:
+					number = "0" + str(n)
+				else:
+					number = str(n)
+				print(make_colors(number + ".", 'lc') + " " + make_colors(i[0], 'lw', 'bl') + " " + "[" + make_colors(str(i[2]), 'lw', 'lr') + "] (" + make_colors(str(i[-1]), 'b', 'lg') + ")")
+				n += 1
+		
+	
+	def setHide(self, filter):
+		
+		all_str = []
+		all_int = []
+		for i in filter:
+			if str(i).isdigit():
+				all_int.append(int(i))
+			else:
+				all_str.append(i)
+		hdls, h_hide, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
+		debug(h_hide = h_hide)
+		debug(h_pids = h_pids)
+		
+		if h_pids:
+			if len(h_pids) > 1:
+				n = 1
+				for i in h_pids:
+					print(str(n) + ". " + str(i[0]))
+					n+=1
+				q = raw_input("Select number to show [all = for show all of hide]: ")
+				if q and str(q).isdigit() and not int(q) > len(h_pids):
+					h = h_pids[int(q) - 1][-1]
+					win32gui.ShowWindow(h, 0)
+				elif  q and str(q).strip() == 'all':
+					for i in h_pids:
+						win32gui.ShowWindow(i[-1], 0)
+			else:
+				h = h_pids[0][-1]
+				win32gui.ShowWindow(h, 0)
+		else:
+			if h_hide:
+				if len(h_hide) > 1:
+					n = 1
+					for i in h_hide:
+						print(str(n) + ". " + str(i[0]))
+						n+=1
+					q = raw_input("Select number to show [all = for show all of hide]: ")
+					if q and str(q).isdigit() and not int(q) > len(h_hide):
+						h = h_hide[int(q) - 1][-1]
+						win32gui.ShowWindow(h, 0)
+					elif  q and str(q).strip() == 'all':
+						for i in h_hide:
+							win32gui.ShowWindow(i[-1], 0)
+				else:
+					h = h_hide[0][-1]
+					win32gui.ShowWindow(h, 0)			
+				
+	def setShow(self, filter):
+		all_str = []
+		all_int = []
+		for i in filter:
+			if str(i).isdigit():
+				all_int.append(int(i))
+			else:
+				all_str.append(i)
+		debug(all_int = all_int)
+		debug(all_str = all_str)
+		hdls, h_hide, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
+		debug(h_hide = h_hide)
+		debug(h_pids = h_pids)		
+		if h_pids:
+			if len(h_pids) > 1:
+				n = 1
+				for i in h_pids:
+					print(str(n) + ". " + str(i[0]))
+					n+=1
+				q = raw_input("Select number to show [all = for show all of hide]: ")
+				if q and str(q).isdigit() and not int(q) > len(h_pids):
+					h = h_pids[int(q) - 1][-1]
+					win32gui.ShowWindow(h, 1)
+				elif  q and str(q).strip() == 'all':
+					for i in h_pids:
+						win32gui.ShowWindow(i[-1], 1)
+			else:
+				h = h_pids[0][-1]
+				win32gui.ShowWindow(h, 1)
+		else:
+			if h_hide:
+				if len(h_hide) > 1:
+					n = 1
+					for i in h_hide:
+						print(str(n) + ". " + str(i[0]))
+						n+=1
+					q = raw_input("Select number to show [all = for show all of hide]: ")
+					if q and str(q).isdigit() and not int(q) > len(h_hide):
+						h = h_hide[int(q) - 1][-1]
+						win32gui.ShowWindow(h, 1)
+					elif  q and str(q).strip() == 'all':
+						for i in h_hide:
+							win32gui.ShowWindow(i[-1], 1)
+				else:
+					h = h_hide[0][-1]
+					win32gui.ShowWindow(h, 1)					
 		
 	def setTop(self, name = None, normal=False):
 		hdls = []
 		if name:
 			def enumsHandle(hwnd, lParam):
 				title = win32gui.GetWindowText(hwnd)
-				if name.lower() in title.lower() or name.lower() == title.lower():
+				if not 'administrator' in title.lower() and name.lower() in title.lower() or name.lower() == title.lower():
 					hdls.append([hwnd, title])
 			win32gui.EnumWindows(enumsHandle, None)
 			
@@ -161,6 +367,7 @@ class dcmd(object):
 					n = 1
 					for i in hdls:
 						print(str(n) + ". " + i[1])
+						n+=1
 					q = raw_input("Select number to top: ")
 					if q and str(q).isdigit() and not int(q) >  len(hdls):
 						h = hdls[int(q) - 1][0]
@@ -169,6 +376,13 @@ class dcmd(object):
 							win32gui.SetWindowPos(h, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 						else:
 							win32gui.SetWindowPos(h, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+				else:
+					h = hdls[0][0]
+					rect = win32gui.GetWindowRect(h)
+					if normal:
+						win32gui.SetWindowPos(h, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+					else:
+						win32gui.SetWindowPos(h, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 		else:
 			rect = win32gui.GetWindowRect(self.foreground_handle)
 			if normal:
@@ -192,10 +406,16 @@ class dcmd(object):
 		parser.add_argument('-fs', '--font-size', action='store', help='Change font size', type = int, default = 13)#, required='--font')
 		parser.add_argument('-fb', '--font-bold', action='store', help='Change font bold', type = int, default = 400)#, required='--font')
 		parser.add_argument('-l', '--list-window', action='store_true', help='Show all window active name/title')
-		parser.add_argument('-t', '--always-top', action='store_true', help='Set always on top')
-		parser.add_argument('-nt', '--not-always-top', action='store_true', help='Set always on top to normal')
+		parser.add_argument('-lh', '--list-window-hide', action='store_true', help='Show all window hiding')
+		parser.add_argument('-la', '--list-all-window', action='store_true', help='Show alls window active name/title')
+		parser.add_argument('-t', '--always-top', action='store', help='Set always on top')
+		parser.add_argument('-nt', '--not-always-top', action='store', help='Set always on top to normal')
 		parser.add_argument('-T', '--always-top-this', action='store_true', help='Set always on top for this terminal')
 		parser.add_argument('-nT', '--not-always-top-this', action='store_true', help='Set always on top for this terminal to normal')
+		parser.add_argument('-gS', '--get-screensize', help='Get Screen size', action='store_true')
+		parser.add_argument('-gs', '--get-current-size', help='Get current window size', action='store_true')
+		parser.add_argument('-hd', '--hide', help = 'Hide windows by name', action = 'store', nargs = '*')
+		parser.add_argument('-sw', '--show', help = 'Show windows by name, type: "all" for show all hide of window', action = 'store', nargs = '*')
 		
 		if len(sys.argv) == 1:
 			parser.print_help()
@@ -203,6 +423,12 @@ class dcmd(object):
 			args = parser.parse_args()
 			if args.width or args.height or args.xpos or args.ypos or args.center:
 				self.setSize(args.width, args.height, args.xpos, args.ypos, args.center)
+			if args.list_window_hide:
+				self.listHide()
+			if args.hide:
+				self.setHide(args.hide)
+			if args.show:
+				self.setShow(args.show)
 			if args.get_buffer:
 				width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = self.getBuffer()
 				print("WIDTH  =", width)
@@ -216,12 +442,20 @@ class dcmd(object):
 				print("BOTTOM =", bottom)
 				print("MAX-X  =", maxx)
 				print("MAX-y  =", maxy)
+			if args.get_current_size:
+				x0, y0, width0, height0 = win32gui.GetWindowRect(self.foreground_handle)
+				print("WIDTH =", width0)
+				print("HEIGHT =", height0)
+				print("X      =", x0)
+				print("Y      =", y0)
 			if args.buffer_column or args.buffer_row:
 				self.setBuffer(args.buffer_row, args.buffer_column)
 			if args.font or args.font_size or args.font_bold:
 				self.changeFont(nfont=12, xfont=11, yfont=args.font_size, ffont=54, wfont=args.font_bold, name=args.font)
 			if args.list_window:
 				self.getListWindows()
+			if args.list_all_window:
+				self.getListWindows(all=True)
 			if args.always_top:
 				self.setTop(args.always_top)
 			if args.not_always_top:
@@ -230,7 +464,8 @@ class dcmd(object):
 				self.setTop()
 			if args.not_always_top_this:
 				self.setTop(normal=True)
-			
+			if args.get_screensize:
+				print(self.getScreenSize())
 		
 if __name__ == '__main__':
 	c = dcmd()
