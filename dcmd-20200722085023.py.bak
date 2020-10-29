@@ -3,12 +3,11 @@ from ctypes import windll, byref, wintypes
 from ctypes.wintypes import SMALL_RECT
 import ctypes
 import traceback
-import sys, os
+import sys
 sys.excepthook = traceback.format_exc
 import struct
 import psutil
 from pause import pause
-import time
 if sys.version_info.major == 3:
 	raw_input = input
 try:
@@ -52,51 +51,27 @@ class dcmd(object):
 		
 	def getHandle(self):
 		return HANDLE
-	
 	def getScreenSize(self):
 		return win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1)
 
-	def setPosition(self, left, top, right, bottom, handle = None):
-		if not handle:
-			handle = self.hdl
+	def setPosition(self, left, top, right, bottom):
+		
 		#rect = wintypes.SMALL_RECT(0, 0, 100, 80) # (left, top, right, bottom) 
 		rect = wintypes.SMALL_RECT(left, top, right, bottom) # (left, top, right, bottom) 
-		windll.kernel32.SetConsoleWindowInfo(handle, True, byref(rect))
+		windll.kernel32.SetConsoleWindowInfo(self.hdl, True, byref(rect))
 		
 	def setBuffer(self, rows=None, columns=None, handle = None):
-		traceback.debug_server_client(str(handle))
-		width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = self.getBuffer(handle)
-		print(width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy)
-		#pause()
+		width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = self.getBuffer()
 		if not rows:
 			rows = width
 		if not columns:
 			columns = height
-		print("columns =", columns)
-		print("rows =", rows)
+			
 		#bufsize = wintypes._COORD(100, 80) # rows, columns
 		bufsize = wintypes._COORD(rows, columns) # rows, columns
-		print("bufsize 0 =", bufsize)
-		traceback.debug_server_client(str(bufsize))
 		if not handle:
-			handle = self.hdl
-		traceback.debug_server_client(str(handle))
-		print("handle 0 =", handle)
-		#pause()
-		try:
-			windll.kernel32.SetConsoleScreenBufferSize(handle, bufsize)
-		except:
-			handle = self.hdl
-			print("handle 1 =", handle)
-			width, height, curx, cury, wattr, left, top, right, bottom, maxx, maxy = self.getBuffer(handle)
-			bufsize = wintypes._COORD(rows, columns) # rows, columns
-			print("bufsize 1 =", bufsize)
-			traceback.debug_server_client(str(bufsize))
-			#pause()
-			try:
-				windll.kernel32.SetConsoleScreenBufferSize(handle, bufsize)
-			except:
-				os.system("mo BL={0} BC={1} WC={2} WL=10".format(rows, columns, columns))
+			handle = self.hdl		
+		windll.kernel32.SetConsoleScreenBufferSize(self.hdl, bufsize)
 		
 	def getBuffer(self, handle = None):
 		if not handle:
@@ -174,10 +149,8 @@ class dcmd(object):
 		else:
 			win32gui.SetWindowPos(handle, win32con.HWND_TOPMOST, x, y, width, height, 0)
 			
-	def setNormal(self, width, height, handle = None):
-		if not handle:
-			handle = self.foreground_handle
-		win32gui.SetWindowPos(handle, win32con.HWND_NOTOPMOST, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, 0)
+	def setNormal(self, width, height):
+		win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_NOTOPMOST, int(win32api.GetSystemMetrics(0)/3), int(win32api.GetSystemMetrics(1)/10), width, height, 0)
 		
 	def changeFont(self, nfont=12, xfont=11, yfont=18, ffont=54, wfont=400, name="Lucida Console", handle = None):
 		font = CONSOLE_FONT_INFOEX() 
@@ -192,7 +165,7 @@ class dcmd(object):
 		#  print("name  =", name)
 		if not handle:
 			handle = self.hdl
-		ctypes.windll.kernel32.SetCurrentConsoleFontEx(handle, ctypes.c_long(False), ctypes.pointer(font))
+		ctypes.windll.kernel32.SetCurrentConsoleFontEx(self.hdl, ctypes.c_long(False), ctypes.pointer(font))
 		
 	def getListProcess(self, filter = None):
 		debug(filter = filter)
@@ -218,17 +191,14 @@ class dcmd(object):
 		return process
 		
 	def getListWindows(self, all = False, filter=None, print_list=True, pid = None):
-		debug(filter = filter)
 		all_filter = []
 		all_list_hide = []
-		all_list_hide_filter = []
 		all_windows = []
 		all_pids = []
 		debug(pid = pid)
 		if filter and not pid:
 			process = self.getListProcess(filter)
 			pid = []
-			debug(process = process)
 			if process:
 				for i in process:
 					pid.append(i.pid)
@@ -237,7 +207,6 @@ class dcmd(object):
 			title = win32gui.GetWindowText(hwnd)
 			rect = win32gui.GetWindowRect(hwnd)
 			ctid, cpid = win32process.GetWindowThreadProcessId(hwnd)
-			#print(ctid, cpid)
 			if not title:
 				try:
 					title = psutil.Process(cpid).name()
@@ -248,43 +217,26 @@ class dcmd(object):
 					title = psutil.Process(cpid).cmdline()
 				except:
 					pass
-
+				
+			if win32gui.IsWindowVisible(hwnd):
+				all_list_hide.append([title, rect, cpid, ctid, hwnd])
 			excpt = ["Form1", "Default IME", "MSCTFIME UI", "frmTray", "frmBar", "frmLine1", "frmLine2", "frmLine3", "frmLine4", "frmLine5", "Rating", "CD Art Display 1.x Class", "CADnotifier", "CiceroUIWndFrame", "VistaSwitcher", "DDE Server Window", "uninteresting", "DWM Notification Window", "EndSessionWindow", "Program Manager", "GetPosWnd", "igfxtrayWindow"]
-			
-			if not all:
-				if title and not title in excpt and not len(title) == 1:
-					all_windows.append([title, rect, cpid, ctid, hwnd])
-					if win32gui.IsWindowVisible(hwnd) == 0:
-						all_list_hide.append([title, rect, cpid, ctid, hwnd])
-					if print_list:
+			all_windows.append([title, rect, cpid, ctid, hwnd])
+			if print_list:
+				if not all:
+					if title and not title in excpt and not len(title) == 1:
 						print(title + " [" + str(rect) + "] [" + str([ctid,cpid]) + "] [" + str(hwnd) + "] (" + str(win32gui.IsWindowVisible(hwnd)) + ")")
-			else:
-				all_windows.append([title, rect, cpid, ctid, hwnd])
-				if win32gui.IsWindowVisible(hwnd) == 0:
-					all_list_hide.append([title, rect, cpid, ctid, hwnd])				
-				if print_list:
+				else:
 					print(title + " [" + str(rect) + "] [" + str([ctid,cpid]) + "] [" + str(hwnd) + "] (" + str(win32gui.IsWindowVisible(hwnd)) + ")")
 		
 		win32gui.EnumWindows(enumsHandle, None)
-		debug(all_list_hide = all_list_hide)
 		if filter:
 			for i in filter:
 				for x in all_windows:
-					if i.lower == x[0].lower():
+					if i in x[0] and not 'administrator' in x[0].lower():
 						all_filter.append(x)
-					else:
-						if i.lower() in x[0].lower() and not 'administrator' in x[0].lower():
-							all_filter.append(x)
-				
-			if all_list_hide:
-				for i in filter:
-					for x in all_list_hide:
-						if i.lower == x[0].lower():
-							all_list_hide_filter.append(x)
-						else:
-							if i.lower() in x[0].lower() and not 'administrator' in x[0].lower():
-								all_list_hide_filter.append(x)
-		debug(pid = pid)
+						if win32gui.IsWindowVisible(x[2]) == 0:
+							all_list_hide.append(x)
 		
 		if pid:
 			for x in all_windows:
@@ -292,12 +244,10 @@ class dcmd(object):
 				for p in pid:
 					if int(x[2]) == int(str(p).strip()):
 						all_pids.append(x)
-		debug(all_pids = all_pids)
-		
-		return all_filter, all_list_hide, all_list_hide_filter, all_pids
+		return all_filter, all_list_hide, all_pids
 	
 	def listHide(self):
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(print_list = False)
+		hdls, h_hide, h_pids = self.getListWindows(print_list = False)
 		if h_hide:
 			n = 1
 			for i in h_hide:
@@ -318,7 +268,7 @@ class dcmd(object):
 				all_int.append(int(i))
 			else:
 				all_str.append(i)
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
+		hdls, h_hide, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
 		debug(h_hide = h_hide)
 		debug(h_pids = h_pids)
 		
@@ -328,7 +278,7 @@ class dcmd(object):
 				for i in h_pids:
 					print(str(n) + ". " + str(i[0]))
 					n+=1
-				q = raw_input("Select number to show [all = for show all of hide] [1]: ")
+				q = raw_input("Select number to show [all = for show all of hide]: ")
 				if q and str(q).isdigit() and not int(q) > len(h_pids):
 					h = h_pids[int(q) - 1][-1]
 					win32gui.ShowWindow(h, 0)
@@ -339,40 +289,22 @@ class dcmd(object):
 				h = h_pids[0][-1]
 				win32gui.ShowWindow(h, 0)
 		else:
-			if hdls:
-				if len(hdls) > 1:
+			if h_hide:
+				if len(h_hide) > 1:
 					n = 1
-					for i in hdls:
+					for i in h_hide:
 						print(str(n) + ". " + str(i[0]))
 						n+=1
-					q = raw_input("Select number to show [all = for show all of hide] [2]: ")
-					if q and str(q).isdigit() and not int(q) > len(hdls):
-						h = hdls[int(q) - 1][-1]
+					q = raw_input("Select number to show [all = for show all of hide]: ")
+					if q and str(q).isdigit() and not int(q) > len(h_hide):
+						h = h_hide[int(q) - 1][-1]
 						win32gui.ShowWindow(h, 0)
 					elif  q and str(q).strip() == 'all':
-						for i in hdls:
+						for i in h_hide:
 							win32gui.ShowWindow(i[-1], 0)
 				else:
-					h = hdls[0][-1]
-					win32gui.ShowWindow(h, 0)
-					
-			else:
-				if h_hide_filter:
-					if len(h_hide_filter) > 1:
-						n = 1
-						for i in h_hide_filter:
-							print(str(n) + ". " + str(i[0]))
-							n+=1
-						q = raw_input("Select number to show [all = for show all of hide] [3]: ")
-						if q and str(q).isdigit() and not int(q) > len(h_hide_filter):
-							h = h_hide_filter[int(q) - 1][-1]
-							win32gui.ShowWindow(h, 0)
-						elif  q and str(q).strip() == 'all':
-							for i in h_hide_filter:
-								win32gui.ShowWindow(i[-1], 0)
-					else:
-						h = h_hide_filter[0][-1]
-						win32gui.ShowWindow(h, 0)							
+					h = h_hide[0][-1]
+					win32gui.ShowWindow(h, 0)			
 				
 	def setShow(self, filter):
 		all_str = []
@@ -384,7 +316,7 @@ class dcmd(object):
 				all_str.append(i)
 		debug(all_int = all_int)
 		debug(all_str = all_str)
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
+		hdls, h_hide, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
 		debug(h_hide = h_hide)
 		debug(h_pids = h_pids)		
 		if h_pids:
@@ -393,58 +325,35 @@ class dcmd(object):
 				for i in h_pids:
 					print(str(n) + ". " + str(i[0]))
 					n+=1
-				q = raw_input("Select number to show [all = for show all of hide] [1]: ")
+				q = raw_input("Select number to show [all = for show all of hide]: ")
 				if q and str(q).isdigit() and not int(q) > len(h_pids):
 					h = h_pids[int(q) - 1][-1]
 					win32gui.ShowWindow(h, 1)
 				elif  q and str(q).strip() == 'all':
 					for i in h_pids:
 						win32gui.ShowWindow(i[-1], 1)
-						win32gui.BringWindowToTop(i[-1])
 			else:
 				h = h_pids[0][-1]
 				win32gui.ShowWindow(h, 1)
-				win32gui.BringWindowToTop(h)
 		else:
-			if hdls:
-				if len(hdls) > 1:
+			if h_hide:
+				if len(h_hide) > 1:
 					n = 1
-					for i in hdls:
+					for i in h_hide:
 						print(str(n) + ". " + str(i[0]))
 						n+=1
-					q = raw_input("Select number to show [all = for show all of hide] [2]: ")
-					if q and str(q).isdigit() and not int(q) > len(hdls):
-						h = hdls[int(q) - 1][-1]
+					q = raw_input("Select number to show [all = for show all of hide]: ")
+					if q and str(q).isdigit() and not int(q) > len(h_hide):
+						h = h_hide[int(q) - 1][-1]
 						win32gui.ShowWindow(h, 1)
 					elif  q and str(q).strip() == 'all':
-						for i in hdls:
-							win32gui.ShowWindow(i[-1], 1)
-							win32gui.BringWindowToTop(i[-1])
-				else:
-					h = hdls[0][-1]
-					win32gui.ShowWindow(h, 1)
-					win32gui.BringWindowToTop(h)
-			else:
-				if h_hide:
-					if len(h_hide) > 1:
-						n = 1
 						for i in h_hide:
-							print(str(n) + ". " + str(i[0]))
-							n+=1
-						q = raw_input("Select number to show [all = for show all of hide] [3]: ")
-						if q and str(q).isdigit() and not int(q) > len(h_hide):
-							h = h_hide[int(q) - 1][-1]
-							win32gui.ShowWindow(h, 1)
-						elif  q and str(q).strip() == 'all':
-							for i in h_hide:
-								win32gui.ShowWindow(i[-1], 1)
-								win32gui.BringWindowToTop(i[-1])
-					else:
-						h = h_hide[0][-1]
-						win32gui.ShowWindow(h, 1)
-						win32gui.BringWindowToTop(h)
-			
-	def setTop(self, name = None, normal=False, handle = None):
+							win32gui.ShowWindow(i[-1], 1)
+				else:
+					h = h_hide[0][-1]
+					win32gui.ShowWindow(h, 1)					
+		
+	def setTop(self, name = None, normal=False):
 		hdls = []
 		if name:
 			def enumsHandle(hwnd, lParam):
@@ -469,203 +378,20 @@ class dcmd(object):
 							win32gui.SetWindowPos(h, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 				else:
 					h = hdls[0][0]
+					print("HANDLE =", h)
 					rect = win32gui.GetWindowRect(h)
-					if normal:
-						win32gui.SetWindowPos(h, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
-					else:
-						win32gui.SetWindowPos(h, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+					#rect = (0, 0, 0, 0)
+					#if normal:
+						#win32gui.SetWindowPos(h, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+					#else:
+						#win32gui.SetWindowPos(h, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 		else:
-			if not handle:
-				handle = self.foreground_handle
-			rect = win32gui.GetWindowRect(handle)
+			rect = win32gui.GetWindowRect(self.foreground_handle)
 			if normal:
-				win32gui.SetWindowPos(handle, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+				win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_NOTOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 			else:
-				win32gui.SetWindowPos(handle, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
+				win32gui.SetWindowPos(self.foreground_handle, win32con.HWND_TOPMOST, rect[0], rect[1], rect[2], rect[3], 0)
 		
-	def setMinimize(self, filter):
-		all_str = []
-		all_int = []
-		for i in filter:
-			if str(i).isdigit():
-				all_int.append(int(i))
-			else:
-				all_str.append(i)
-		debug(all_int = all_int)
-		debug(all_str = all_str)
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
-		debug(hdls = hdls)
-		debug(h_hide = h_hide)
-		debug(h_hide_filter = h_hide_filter)
-		debug(h_pids = h_pids)		
-		if h_pids:
-			if len(h_pids) > 1:
-				n = 1
-				for i in h_pids:
-					print(str(n) + ". " + str(i[0]))
-					n+=1
-				q = raw_input("Select number to show [all = for show all of hide]: ")
-				if q and str(q).isdigit() and not int(q) > len(h_pids):
-					h = h_pids[int(q) - 1][-1]
-					win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-				elif  q and str(q).strip() == 'all':
-					for i in h_pids:
-						win32gui.ShowWindow(i[-1], win32con.SW_MINIMIZE)
-			else:
-				h = h_pids[0][-1]
-				win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-		elif h_hide_filter:
-			if len(h_hide_filter) > 1:
-				n = 1
-				for i in h_hide_filter:
-					print(str(n) + ". " + str(i[0]))
-					n+=1
-				q = raw_input("Select number to show [all = for show all of hide]: ")
-				if q and str(q).isdigit() and not int(q) > len(h_hide_filter):
-					h = h_hide_filter[int(q) - 1][-1]
-					win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-				elif  q and str(q).strip() == 'all':
-					for i in h_hide_filter:
-						win32gui.ShowWindow(i[-1], win32con.SW_MINIMIZE)
-			else:
-				h = h_hide_filter[0][-1]
-				win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-				
-		elif hdls:
-			if len(hdls) > 1:
-				n = 1
-				for i in hdls:
-					print(str(n) + ". " + str(i[0]))
-					n+=1
-				q = raw_input("Select number to show [all = for show all of hide]: ")
-				if q and str(q).isdigit() and not int(q) > len(hdls):
-					h = hdls[int(q) - 1][-1]
-					win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-				elif  q and str(q).strip() == 'all':
-					for i in hdls:
-						win32gui.ShowWindow(i[-1], win32con.SW_MINIMIZE)
-			else:
-				h = hdls[0][-1]
-				win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-		#elif h_hide:
-			#if len(h_hide) > 1:
-				#n = 1
-				#for i in h_hide:
-					#print(str(n) + ". " + str(i[0]))
-					#n+=1
-				#q = raw_input("Select number to show [all = for show all of hide]: ")
-				#if q and str(q).isdigit() and not int(q) > len(h_hide):
-					#h = h_hide[int(q) - 1][-1]
-					#win32gui.ShowWindow(h, win32con.SW_MINIMIZE)
-				#elif  q and str(q).strip() == 'all':
-					#for i in h_hide:
-						#win32gui.ShowWindow(i[-1], win32con.SW_MINIMIZE)
-			#else:
-				#h = h_hide[0][-1]
-				#win32gui.ShowWindow(h, win32con.SW_MINIMIZE)		
-	
-	def setMaximize(self, filter):
-		all_str = []
-		all_int = []
-		for i in filter:
-			if str(i).isdigit():
-				all_int.append(int(i))
-			else:
-				all_str.append(i)
-		debug(all_int = all_int)
-		debug(all_str = all_str)
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
-		debug(h_hide = h_hide)
-		debug(h_pids = h_pids)		
-		if h_pids:
-			if len(h_pids) > 1:
-				n = 1
-				for i in h_pids:
-					print(str(n) + ". " + str(i[0]))
-					n+=1
-				q = raw_input("Select number to show [all = for show all of hide]: ")
-				if q and str(q).isdigit() and not int(q) > len(h_pids):
-					h = h_pids[int(q) - 1][-1]
-					win32gui.ShowWindow(h, 1)
-				elif  q and str(q).strip() == 'all':
-					for i in h_pids:
-						win32gui.ShowWindow(i[-1], win32con.SW_MAXIMIZE)
-						win32gui.BringWindowToTop(i[-1])
-			else:
-				h = h_pids[0][-1]
-				win32gui.ShowWindow(h, win32con.SW_MAXIMIZE)
-				win32gui.BringWindowToTop(h)
-		else:
-			if hdls:
-				if len(hdls) > 1:
-					n = 1
-					for i in hdls:
-						print(str(n) + ". " + str(i[0]))
-						n+=1
-					q = raw_input("Select number to show [all = for show all of hide]: ")
-					if q and str(q).isdigit() and not int(q) > len(hdls):
-						h = hdls[int(q) - 1][-1]
-						win32gui.ShowWindow(h, 1)
-					elif  q and str(q).strip() == 'all':
-						for i in hdls:
-							win32gui.ShowWindow(i[-1], win32con.SW_MAXIMIZE)
-							win32gui.BringWindowToTop(i[-1])
-				else:
-					h = hdls[0][-1]
-					win32gui.ShowWindow(h, win32con.SW_MAXIMIZE)
-					win32gui.BringWindowToTop(h)
-					
-	def setRestore(self, filter):
-		all_str = []
-		all_int = []
-		for i in filter:
-			if str(i).isdigit():
-				all_int.append(int(i))
-			else:
-				all_str.append(i)
-		debug(all_int = all_int)
-		debug(all_str = all_str)
-		hdls, h_hide, h_hide_filter, h_pids = self.getListWindows(filter=all_str, print_list=False, pid = all_int)
-		debug(h_hide = h_hide)
-		debug(h_pids = h_pids)		
-		if h_pids:
-			if len(h_pids) > 1:
-				n = 1
-				for i in h_pids:
-					print(str(n) + ". " + str(i[0]))
-					n+=1
-				q = raw_input("Select number to show [all = for show all of hide]: ")
-				if q and str(q).isdigit() and not int(q) > len(h_pids):
-					h = h_pids[int(q) - 1][-1]
-					win32gui.ShowWindow(h, 1)
-				elif  q and str(q).strip() == 'all':
-					for i in h_pids:
-						win32gui.ShowWindow(i[-1], win32con.SW_RESTORE)
-						win32gui.BringWindowToTop(i[-1])
-			else:
-				h = h_pids[0][-1]
-				win32gui.ShowWindow(h, win32con.SW_RESTORE)
-				win32gui.BringWindowToTop(h)
-		else:
-			if h_hide:
-				if len(h_hide) > 1:
-					n = 1
-					for i in h_hide:
-						print(str(n) + ". " + str(i[0]))
-						n+=1
-					q = raw_input("Select number to show [all = for show all of hide]: ")
-					if q and str(q).isdigit() and not int(q) > len(h_hide):
-						h = h_hide[int(q) - 1][-1]
-						win32gui.ShowWindow(h, 1)
-					elif  q and str(q).strip() == 'all':
-						for i in h_hide:
-							win32gui.ShowWindow(i[-1], win32con.SW_RESTORE)
-							win32gui.BringWindowToTop(i[-1])
-				else:
-					h = h_hide[0][-1]
-					win32gui.ShowWindow(h, win32con.SW_RESTORE)
-					win32gui.BringWindowToTop(h)	
-	
 	def usage(self):
 		import argparse
 		import sys
@@ -692,42 +418,13 @@ class dcmd(object):
 		parser.add_argument('-gs', '--get-current-size', help='Get current window size', action='store_true')
 		parser.add_argument('-hd', '--hide', help = 'Hide windows by name', action = 'store', nargs = '*')
 		parser.add_argument('-sw', '--show', help = 'Show windows by name, type: "all" for show all hide of window', action = 'store', nargs = '*')
-		parser.add_argument('-M', '--maximize', help = 'Show windows as maximize by name', action = 'store', nargs = '*')
-		parser.add_argument('-m', '--minimize', help = 'Show windows as minimize by name', action = 'store', nargs = '*')
-		parser.add_argument('-r', '--restore', help = 'Restore windows and bring to front', action = 'store', nargs = '*')
-		parser.add_argument('-F', '--find', help = 'Find process by name or pid', action = 'store')
-		parser.add_argument('--wait', help = 'Wait before execute', action = 'store', type = int)
 		
 		if len(sys.argv) == 1:
 			parser.print_help()
 		else:
 			args = parser.parse_args()
-			if args.find:
-				n = 1
-				if args.wait:
-					time.sleep(args.wait)
-				if args.find.isdigit():
-					all_filter, all_list_hide, all_list_hide_filter, all_pids = self.getListWindows(pid = args.find, print_list = False)
-				else:
-					all_filter, all_list_hide, all_list_hide_filter, all_pids = self.getListWindows(filter = [args.find], print_list = False)
-				if all_filter:
-					for i in all_filter:
-						if ".exe" in i[0].lower():
-							number = str(n)
-							if len(number) == 1:
-								number = "0" + str(n)
-							
-							print(make_colors(number, 'lc') + ". " + make_colors(i[0], 'lw', 'lr') + " " + make_colors("PID:", 'lw', 'bl') + " " + make_colors(str(i[2]), 'b', 'ly') + " " + make_colors("HANDLE:", 'lw', 'bl') + " " + make_colors(str(i[-1]), 'lr', 'lw') + " " + make_colors("PARENT:", 'lw', 'bl') + " " + make_colors(str(win32gui.GetParent(i[-1])), 'b', 'lg'))
-							n += 1
-
 			if args.width or args.height or args.xpos or args.ypos or args.center:
 				self.setSize(args.width, args.height, args.xpos, args.ypos, args.center)
-			if args.maximize:
-				self.setMaximize(args.maximize)
-			if args.minimize:
-				self.setMinimize(args.minimize)
-			if args.restore:
-				self.setRestore(args.restore)
 			if args.list_window_hide:
 				self.listHide()
 			if args.hide:
