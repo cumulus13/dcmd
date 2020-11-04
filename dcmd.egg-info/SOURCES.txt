@@ -1,0 +1,8 @@
+dcmd.py
+setup.py
+dcmd.egg-info/PKG-INFO
+dcmd.egg-info/SOURCES.txt
+dcmd.egg-info/dependency_links.txt
+dcmd.egg-info/entry_points.txt
+dcmd.egg-info/requires.txt
+dcmd.egg-info/top_level.txt

@@ -9,8 +9,7 @@ import struct
 import psutil
 try:
 	from pause import pause
-except:
-	pass
+pass
 import time
 if sys.version_info.major == 3:
 	raw_input = input
